@@ -122,6 +122,9 @@ def _as_media_doc(doc):
         d['file_id'] = d.get('_id')
     if d.get('_id') is None and d.get('file_id') is not None:
         d['_id'] = d.get('file_id')
+    
+    # 🚫 FORCE BYPASS (Malyalam aur spam links wale database captions ko block kiya)
+    d['caption'] = None
     return d
 
 
@@ -166,7 +169,7 @@ class SQLMediaCollection:
                     file_size=r[3],
                     file_type=r[4],
                     mime_type=r[5],
-                    caption=r[6],
+                    caption=None, # Cleaned
                     created_at=r[7],
                 )
             )
@@ -329,9 +332,6 @@ if USE_MONGO:
                 try:
                     await col.create_index(spec)
                 except OperationFailure as exc:
-                    # Some providers can return stale/invalid options for existing
-                    # indexes (especially around implicit _id index metadata).
-                    # Do not crash bot startup for non-fatal index option issues.
                     if getattr(exc, 'code', None) == 197 or 'InvalidIndexSpecificationOption' in str(exc):
                         logger.warning("Skipping incompatible index option on %s: %s", col.name, exc)
                         return
@@ -365,7 +365,7 @@ else:
             rows = conn.execute(text("SELECT file_id, file_ref, file_name, file_size, file_type, mime_type, caption, created_at FROM media")).fetchall()
         docs = []
         for r in rows:
-            d = dict(file_id=r[0], _id=r[0], file_ref=r[1], file_name=r[2], file_size=r[3], file_type=r[4], mime_type=r[5], caption=r[6], created_at=r[7])
+            d = dict(file_id=r[0], _id=r[0], file_ref=r[1], file_name=r[2], file_size=r[3], file_type=r[4], mime_type=r[5], caption=None, created_at=r[7])
             if _match_filter(d, query or {}):
                 docs.append(d)
         return docs
@@ -388,8 +388,6 @@ else:
 
 async def save_file(media):
     """Save file in database"""
-
-    # TODO: Find better way to get same file_id for same media to avoid duplicates
     file_id, file_ref = unpack_new_file_id(media.file_id)
     file_name = re.sub(r"(_|\-|\.|\+)", " ", str(media.file_name))
 
@@ -401,7 +399,7 @@ async def save_file(media):
             'file_size': media.file_size,
             'file_type': media.file_type,
             'mime_type': media.mime_type,
-            'caption': media.caption.html if media.caption else None,
+            'caption': None, # Do not save spam captions
             'created_at': time.time(),
         }
         try:
@@ -432,7 +430,7 @@ async def save_file(media):
                 "fsize": media.file_size,
                 "ftype": media.file_type,
                 "mtype": media.mime_type,
-                "caption": media.caption.html if media.caption else None,
+                "caption": None,
             },
         )
     _SEARCH_CACHE.clear()
@@ -475,7 +473,6 @@ def unpack_new_file_id(new_file_id):
     file_ref = encode_file_ref(decoded.file_reference)
     return file_id, file_ref
 
-# SQL fast-path overrides
 
 def _sql_row_to_doc(row):
     return SQLMediaDoc(
@@ -487,7 +484,7 @@ def _sql_row_to_doc(row):
             file_size=row[3],
             file_type=row[4],
             mime_type=row[5],
-            caption=row[6],
+            caption=None, # Cleaned Forcefully
             created_at=row[7],
         )
     )
@@ -503,10 +500,7 @@ def _build_mongo_search_filter(query, file_type=None):
         raw_pattern = r'.*'.join(map(re.escape, query.split()))
 
     regex = re.compile(raw_pattern, flags=re.IGNORECASE)
-    if USE_CAPTION_FILTER:
-        search_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
-    else:
-        search_filter = {'file_name': regex}
+    search_filter = {'file_name': regex}
 
     if file_type:
         search_filter['file_type'] = file_type
@@ -532,7 +526,7 @@ async def get_search_results(
     if max_results == 0:
         return _finish_search([], '', 0, started_at, return_time)
 
-    cache_key = (query.lower(), file_type, max_results, offset, bool(USE_CAPTION_FILTER), bool(USE_MONGO), fast)
+    cache_key = (query.lower(), file_type, max_results, offset, False, bool(USE_MONGO), fast)
     cached = _cache_get(cache_key)
     if cached is not None:
         files, next_offset, total_results = cached
@@ -552,10 +546,7 @@ async def get_search_results(
             for idx, term in enumerate(terms):
                 key = f"term_{idx}"
                 params[key] = f"%{term}%"
-                if USE_CAPTION_FILTER:
-                    term_sql.append(f"(file_name ILIKE :{key} OR COALESCE(caption, '') ILIKE :{key})")
-                else:
-                    term_sql.append(f"file_name ILIKE :{key}")
+                term_sql.append(f"file_name ILIKE :{key}")
             where.append(" AND ".join(term_sql))
 
         where_clause = " AND ".join(where) if where else "TRUE"
@@ -593,181 +584,5 @@ async def get_search_results(
             next_offset = ''
         result = (files, next_offset, total_results)
         _cache_set(cache_key, result)
-        return _finish_search(*result, started_at, return_time)
-
-    try:
-        search_filter = _build_mongo_search_filter(query, file_type=file_type)
-    except Exception:
-        return _finish_search([], '', 0, started_at, return_time)
-
-    projection = {
-        'file_ref': 1,
-        'file_name': 1,
-        'file_size': 1,
-        'file_type': 1,
-        'mime_type': 1,
-        'caption': 1,
-        'created_at': 1,
-    }
-
-    if MONGO_SHARD_COUNT == 1:
-        col = _mongo_collections[0]
-        docs_limit = max_results + 1 if fast else max_results
-        docs_task = (
-            col.find(search_filter, projection)
-            .sort('created_at', -1)
-            .skip(offset)
-            .limit(docs_limit)
-            .to_list(length=docs_limit)
-        )
-        if fast:
-            docs = await docs_task
-            has_more = len(docs) > max_results
-            files = [_as_media_doc(d) for d in docs[:max_results]]
-            total_results = offset + len(files) + (1 if has_more else 0)
-            next_offset = offset + max_results if has_more else ''
-        else:
-            count_task = col.count_documents(search_filter)
-            total_results, docs = await asyncio.gather(count_task, docs_task)
-            next_offset = offset + max_results
-            if next_offset >= total_results:
-                next_offset = ''
-            files = [_as_media_doc(d) for d in docs]
-        result = (files, next_offset, total_results)
-        _cache_set(cache_key, result)
-        return _finish_search(*result, started_at, return_time)
-
-    fetch_limit = offset + max_results + (1 if fast else 0)
-
-    async def _fetch(col):
-        docs = await (
-            col.find(search_filter, projection)
-            .sort('created_at', -1)
-            .limit(fetch_limit)
-            .to_list(length=fetch_limit)
-        )
-        return [_as_media_doc(d) for d in docs]
-
-    fetch_task = asyncio.gather(*[_fetch(col) for col in _mongo_collections])
-    if fast:
-        parts = await fetch_task
-        total_results = None
-    else:
-        count_task = asyncio.gather(*[col.count_documents(search_filter) for col in _mongo_collections])
-        counts, parts = await asyncio.gather(count_task, fetch_task)
-        total_results = sum(counts)
-
-    files = [d for part in parts for d in part]
-    files.sort(key=lambda d: d.get('created_at', 0), reverse=True)
-    page_files = files[offset: offset + max_results + (1 if fast else 0)]
-    has_more = fast and len(page_files) > max_results
-    files = page_files[:max_results]
-
-    next_offset = offset + max_results
-    if fast:
-        total_results = offset + len(files) + (1 if has_more else 0)
-        if not has_more:
-            next_offset = ''
-    elif next_offset >= total_results:
-        next_offset = ''
-
-    result = (files, next_offset, total_results)
-    _cache_set(cache_key, result)
-    return _finish_search(*result, started_at, return_time)
-
-
-async def get_file_details(query):
-    if not USE_MONGO:
-        with store.begin() as conn:
-            row = conn.execute(
-                text(
-                    "SELECT file_id, file_ref, file_name, file_size, file_type, mime_type, caption, created_at "
-                    "FROM media WHERE file_id=:file_id LIMIT 1"
-                ),
-                {"file_id": query},
-            ).first()
-        return [_sql_row_to_doc(row)] if row else []
-
-    search_filter = {'_id': query}
-    if MONGO_SHARD_COUNT == 1:
-        filedetails = await _mongo_collections[0].find(search_filter).limit(1).to_list(length=1)
-        return [_as_media_doc(filedetails[0])] if filedetails else []
-
-    primary_col = _target_collection(query)
-    filedetails = await primary_col.find(search_filter).limit(1).to_list(length=1)
-    if filedetails:
-        return [_as_media_doc(filedetails[0])]
-
-    fallback_cols = [col for col in _mongo_collections if col is not primary_col]
-    fallback_results = await asyncio.gather(
-        *[col.find(search_filter).limit(1).to_list(length=1) for col in fallback_cols]
-    )
-    for filedetails in fallback_results:
-        if filedetails:
-            return [_as_media_doc(filedetails[0])]
-    return []
-
-
-async def get_movie_list(limit=20):
-    if not USE_MONGO:
-        with store.begin() as conn:
-            rows = conn.execute(text("SELECT file_name FROM media ORDER BY created_at DESC LIMIT 300")).fetchall()
-        results = []
-        for row in rows:
-            name = row[0] or ""
-            if not re.search(r"(s\d{1,2}|season\s*\d+).*?(e\d{1,2}|episode\s*\d+)", name, re.I):
-                results.append(name)
-            if len(results) >= limit:
-                break
-        return results
-
-    cursor = Media.find().sort("$natural", -1).limit(100)
-    files = await cursor.to_list(length=100)
-    results = []
-
-    for file in files:
-        name = getattr(file, "file_name", "")
-        if not re.search(r"(s\d{1,2}|season\s*\d+).*?(e\d{1,2}|episode\s*\d+)", name, re.I):
-            results.append(name)
-        if len(results) >= limit:
-            break
-    return results
-
-
-async def get_series_grouped(limit=30):
-    if not USE_MONGO:
-        with store.begin() as conn:
-            rows = conn.execute(text("SELECT file_name FROM media ORDER BY created_at DESC LIMIT 500")).fetchall()
-        grouped = defaultdict(list)
-
-        for row in rows:
-            name = row[0] or ""
-            match = re.search(r"(.*?)(?:S\d{1,2}|Season\s*\d+).*?(?:E|Ep|Episode)?(\d{1,2})", name, re.I)
-            if match:
-                title = match.group(1).strip().title()
-                episode = int(match.group(2))
-                grouped[title].append(episode)
-            if len(grouped) >= limit:
-                break
-
-        return {
-            title: sorted(set(eps))[:10]
-            for title, eps in grouped.items() if eps
-        }
-
-    cursor = Media.find().sort("$natural", -1).limit(150)
-    files = await cursor.to_list(length=150)
-    grouped = defaultdict(list)
-
-    for file in files:
-        name = getattr(file, "file_name", "")
-        match = re.search(r"(.*?)(?:S\d{1,2}|Season\s*\d+).*?(?:E|Ep|Episode)?(\d{1,2})", name, re.I)
-        if match:
-            title = match.group(1).strip().title()
-            episode = int(match.group(2))
-            grouped[title].append(episode)
-
-    return {
-        title: sorted(set(eps))[:10]
-        for title, eps in grouped.items() if eps
-    }
+        return _finish_search(*result, started_at, return_time
+        
