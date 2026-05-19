@@ -56,3 +56,5 @@ HYPER_MODE = environ.get('HYPER_MODE', "False") == "True"
 USE_CAPTION_FILTER = False # Strict clean files filter
 
 LOG_CHANNEL = int(environ.get('LOG_CHANNEL', ''))
+# Welcome settings for new users
+MELCOW_NEW_USERS = environ.get('MELCOW_NEW_USERS', "True") == "True"
