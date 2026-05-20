@@ -63,3 +63,6 @@ SESSION = environ.get('SESSION', 'Media_search')
 LOG_STR = environ.get('LOG_STR', '')
 KEEP_ALIVE_URL = environ.get('KEEP_ALIVE_URL', '')
 DEFAULT_AUTH_CHANNELS = [int(ch) for ch in environ.get('DEFAULT_AUTH_CHANNELS', '').split()]
+# Missing IMDb & listing variables required by utils.py
+LONG_IMDB_DESCRIPTION = environ.get('LONG_IMDB_DESCRIPTION', "False") == "True"
+MAX_LIST_ELM = int(environ.get('MAX_LIST_ELM', 5))
