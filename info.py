@@ -2,6 +2,7 @@ import re
 from os import environ
 import time
 BOT_START_TIME = time.time()
+CACHE_TIME = int(environ.get("CACHE_TIME", 300))
 
 id_pattern = re.compile(r'^\b[+-]?\d+\b')
 
