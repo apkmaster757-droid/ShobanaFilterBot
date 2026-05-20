@@ -1,15 +1,13 @@
 import asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from info import ADMINS
 from database.users_chats_db import db
 import plugins.new_updates as nu
 from plugins.commands import build_fsub_details_text
 
-
 def is_admin(user) -> bool:
     return user and (user.id in ADMINS or (f"@{user.username}" in ADMINS if user.username else False))
-
 
 def _updates_text():
     cfg = nu.get_runtime_update_config()
@@ -23,7 +21,6 @@ def _updates_text():
         f"GROUP_SEARCH_TEXT: <code>{cfg['GROUP_SEARCH_TEXT']}</code>"
     )
 
-
 def _updates_markup():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Movie Channels", callback_data="admin:upd:channels"), InlineKeyboardButton("Set New Chat", callback_data="admin:upd:setchat")],
@@ -32,7 +29,6 @@ def _updates_markup():
         [InlineKeyboardButton("GetDLink Size", callback_data="admin:upd:dlsize"), InlineKeyboardButton("Refresh", callback_data="admin:updates")],
         [InlineKeyboardButton("Back", callback_data="admin:back")],
     ])
-
 
 @Client.on_message(filters.command("admin") & filters.private)
 async def admin_panel(client, message):
@@ -43,7 +39,6 @@ async def admin_panel(client, message):
         [InlineKeyboardButton("Movie Updates", callback_data="admin:updates")],
     ])
     await message.reply("⚙️ <b>Admin Panel</b>\nChoose a section:", reply_markup=buttons)
-
 
 @Client.on_callback_query(filters.regex(r"^admin:fsub$"))
 async def admin_fsub_menu(client, query):
@@ -56,14 +51,12 @@ async def admin_fsub_menu(client, query):
     ])
     await query.message.edit_text("FSUB options:", reply_markup=buttons)
 
-
 @Client.on_callback_query(filters.regex(r"^admin:fsub:set$"))
 async def admin_fsub_set(client, query):
     if not is_admin(query.from_user):
         return await query.answer("Not allowed", show_alert=True)
     await query.answer()
     await query.message.reply("Use:\n<code>/fsub -100123 -100456 ...</code>")
-
 
 @Client.on_callback_query(filters.regex(r"^admin:fsub:show$"))
 async def admin_fsub_show(client, query):
@@ -72,13 +65,11 @@ async def admin_fsub_show(client, query):
     text = await build_fsub_details_text(client)
     await query.message.edit_text(text, disable_web_page_preview=True)
 
-
 @Client.on_callback_query(filters.regex(r"^admin:updates$"))
 async def admin_updates(client, query):
     if not is_admin(query.from_user):
         return await query.answer("Not allowed", show_alert=True)
     await query.message.edit_text(_updates_text(), reply_markup=_updates_markup())
-
 
 @Client.on_callback_query(filters.regex(r"^admin:back$"))
 async def admin_back(client, query):
@@ -89,7 +80,6 @@ async def admin_back(client, query):
         [InlineKeyboardButton("Movie Updates", callback_data="admin:updates")],
     ])
     await query.message.edit_text("⚙️ <b>Admin Panel</b>\nChoose a section:", reply_markup=buttons)
-
 
 @Client.on_callback_query(filters.regex(r"^admin:upd:channels$"))
 async def admin_upd_channels(client, query):
@@ -139,3 +129,26 @@ async def admin_num_apply(client, query):
     elif key=="sdelay": nu.set_runtime_update_config("SEND_DELAY", round(cfg["SEND_DELAY"] + (0.1*delta), 2))
     await query.answer("Updated")
     await query.message.edit_text(_updates_text(), reply_markup=_updates_markup())
+
+@Client.on_message(filters.command("index") & filters.private)
+async def manual_index(client, message):
+    if not is_admin(message.from_user):
+        return await message.reply("🚫 Unauthorized")
+    if len(message.command) < 2:
+        return await message.reply("Use: <code>/index -100xxxxx</code>")
+    chat_id = message.command[1]
+    m = await message.reply(f"⏳ Indexing started for <code>{chat_id}</code>...\nFiles are saving to DB.")
+    count = 0
+    try:
+        from database.ia_filterdb import save_file
+        async for msg in client.get_chat_history(int(chat_id)):
+            file = msg.document or msg.video or msg.audio
+            if file:
+                try:
+                    res = await save_file(file)
+                    if res: count += 1
+                except Exception:
+                    continue
+        await m.edit(f"✅ Indexing complete!\nTotal <b>{count}</b> files saved to your database.")
+    except Exception as e:
+        await m.edit(f"❌ Error while indexing: <code>{str(e)}</code>")
