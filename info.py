@@ -1,5 +1,7 @@
 import re
 from os import environ
+import time
+BOT_START_TIME = time.time()
 
 id_pattern = re.compile(r'^\b[+-]?\d+\b')
 
