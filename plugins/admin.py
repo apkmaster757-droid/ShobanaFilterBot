@@ -2,40 +2,93 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from info import ADMINS
-from database.ia_filterdb import save_file
+from database.users_chats_db import db
+import plugins.new_updates as nu
 
 def is_admin(user) -> bool:
     return user and (user.id in ADMINS or (f"@{user.username}" in ADMINS if user.username else False))
 
-@Client.on_message(filters.command("index") & filters.private)
-async def manual_index(client, message):
-    if not is_admin(message.from_user):
-        return await message.reply("🚫 Unauthorized")
-    
-    if len(message.command) < 2:
-        return await message.reply("Use: <code>/index -100xxxxxxxxx</code>")
-    
-    chat_id = int(message.command[1])
-    m = await message.reply("⏳ Indexing in progress... scanning channel files.")
-    
-    count = 0
-    # Hum yahan loop use kar rahe hain jo bot ke liye safe hai
-    for i in range(1, 2000): # Aap yahan range badha sakte hain
-        try:
-            msg = await client.get_messages(chat_id, i)
-            file = msg.document or msg.video or msg.audio
-            if file:
-                res = await save_file(file)
-                if res: count += 1
-        except Exception:
-            continue
-        
-        if i % 20 == 0: await asyncio.sleep(1) # Flood wait se bachne ke liye
+def _updates_text():
+    cfg = nu.get_runtime_update_config()
+    return (
+        "<b>Movie Updates Config</b>\n\n"
+        f"PAGE_SIZE: <code>{cfg['PAGE_SIZE']}</code>\n"
+        f"SEND_DELAY: <code>{cfg['SEND_DELAY']}</code>\n"
+        f"GETDLINK_PAGE_SIZE: <code>{cfg['GETDLINK_PAGE_SIZE']}</code>\n"
+        f"GROUP_SIZE: <code>{cfg['GROUP_SIZE']}</code>\n"
+        f"CHANNEL_SEND_MODE: <code>{cfg['CHANNEL_SEND_MODE']}</code>\n"
+        f"GROUP_SEARCH_TEXT: <code>{cfg['GROUP_SEARCH_TEXT']}</code>"
+    )
 
-    await m.edit(f"✅ Indexing complete!\nTotal files added to DB: <b>{count}</b>")
+def _updates_markup():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Movie Channels", callback_data="admin:upd:channels"), InlineKeyboardButton("Set New Chat", callback_data="admin:upd:setchat")],
+        [InlineKeyboardButton("Mode", callback_data="admin:upd:mode"), InlineKeyboardButton("Group Size", callback_data="admin:upd:gsize")],
+        [InlineKeyboardButton("Page Size", callback_data="admin:upd:psize"), InlineKeyboardButton("Send Delay", callback_data="admin:upd:sdelay")],
+        [InlineKeyboardButton("GetDLink Size", callback_data="admin:upd:dlsize"), InlineKeyboardButton("Refresh", callback_data="admin:updates")],
+    ])
 
 @Client.on_message(filters.command("admin") & filters.private)
 async def admin_panel(client, message):
-    if not is_admin(message.from_user): return
-    await message.reply("⚙️ Admin Panel is active.")
+    if not is_admin(message.from_user):
+        return await message.reply("🚫 You are not authorized.")
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Movie Updates", callback_data="admin:updates")],
+    ])
+    await message.reply("⚙️ <b>Admin Panel</b>\nChoose a section:", reply_markup=buttons)
+
+@Client.on_callback_query(filters.regex(r"^admin:updates$"))
+async def admin_updates(client, query):
+    if not is_admin(query.from_user):
+        return await query.answer("Not allowed", show_alert=True)
+    await query.message.edit_text(_updates_text(), reply_markup=_updates_markup())
+
+@Client.on_callback_query(filters.regex(r"^admin:upd:channels$"))
+async def admin_upd_channels(client, query):
+    ids = await db.get_update_chat_ids()
+    if not ids:
+        return await query.answer("No update chats set", show_alert=True)
+    lines = ["<b>Update Chats</b>"]
+    for cid in ids:
+        try:
+            c = await client.get_chat(int(cid))
+            name = c.title or c.first_name or "Unknown"
+            lines.append(f"\n• {name} - <code>{cid}</code>")
+        except Exception:
+            lines.append(f"\n• <code>{cid}</code>")
+    await query.message.edit_text("\n".join(lines), reply_markup=_updates_markup())
+
+@Client.on_callback_query(filters.regex(r"^admin:upd:setchat$"))
+async def admin_upd_setchat(client, query):
+    await query.message.reply("Use: <code>/setupchat -100123 -100456</code>")
+    await query.answer()
+
+@Client.on_callback_query(filters.regex(r"^admin:upd:mode$"))
+async def admin_upd_mode(client, query):
+    kb=InlineKeyboardMarkup([[InlineKeyboardButton("individual", callback_data="admin:setmode:individual"), InlineKeyboardButton("grouped", callback_data="admin:setmode:grouped"), InlineKeyboardButton("manual", callback_data="admin:setmode:manual")]])
+    await query.message.edit_text("Choose CHANNEL_SEND_MODE:", reply_markup=kb)
+
+@Client.on_callback_query(filters.regex(r"^admin:setmode:(individual|grouped|manual)$"))
+async def admin_setmode(client, query):
+    mode = query.matches[0].group(1)
+    nu.set_runtime_update_config("CHANNEL_SEND_MODE", mode)
+    await query.answer(f"Mode set to {mode}")
+    await query.message.edit_text(_updates_text(), reply_markup=_updates_markup())
+
+@Client.on_callback_query(filters.regex(r"^admin:upd:(gsize|psize|dlsize|sdelay)$"))
+async def admin_upd_numeric(client, query):
+    key=query.matches[0].group(1)
+    kb=InlineKeyboardMarkup([[InlineKeyboardButton("-", callback_data=f"admin:num:{key}:-1"), InlineKeyboardButton("+", callback_data=f"admin:num:{key}:1")]])
+    await query.message.edit_text(f"Adjust {key}", reply_markup=kb)
+
+@Client.on_callback_query(filters.regex(r"^admin:num:(gsize|psize|dlsize|sdelay):(-?1)$"))
+async def admin_num_apply(client, query):
+    key,delta=query.matches[0].group(1), int(query.matches[0].group(2))
+    cfg = nu.get_runtime_update_config()
+    if key=="gsize": nu.set_runtime_update_config("GROUP_SIZE", cfg["GROUP_SIZE"] + delta)
+    elif key=="psize": nu.set_runtime_update_config("PAGE_SIZE", cfg["PAGE_SIZE"] + delta)
+    elif key=="dlsize": nu.set_runtime_update_config("GETDLINK_PAGE_SIZE", cfg["GETDLINK_PAGE_SIZE"] + delta)
+    elif key=="sdelay": nu.set_runtime_update_config("SEND_DELAY", round(cfg["SEND_DELAY"] + (0.1*delta), 2))
+    await query.answer("Updated")
+    await query.message.edit_text(_updates_text(), reply_markup=_updates_markup())
     
