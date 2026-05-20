@@ -210,15 +210,15 @@ async def start(client, message):
             InlineKeyboardButton('ʀᴇᴘᴏ', url='https://github.com/mn-bots/ShobanaFilterBot')
          ]]
         reply_markup = InlineKeyboardMarkup(buttons)
-        m=await message.reply_text("ShobanaFilterBot") 
+        m=await message.reply_text("ShobanaFilterBot")
         await asyncio.sleep(1.2)
         await m.delete()
-                await message.reply_text(
+        await message.reply_text(
             text=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
             reply_markup=reply_markup,
             parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview=True
-                )
+        )
         return
     if len(message.command) == 2 and message.command[1].startswith('mntgx'):
         payload = message.command[1]
