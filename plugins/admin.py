@@ -137,18 +137,26 @@ async def manual_index(client, message):
     if len(message.command) < 2:
         return await message.reply("Use: <code>/index -100xxxxx</code>")
     chat_id = message.command[1]
-    m = await message.reply(f"⏳ Indexing started for <code>{chat_id}</code>...\nFiles are saving to DB.")
+    m = await message.reply(f"⏳ Indexing started for channel <code>{chat_id}</code>...\nScanning messages via ID fallback.")
     count = 0
     try:
         from database.ia_filterdb import save_file
-        async for msg in client.get_chat_history(int(chat_id)):
-            file = msg.document or msg.video or msg.audio
-            if file:
-                try:
+        # Idiotic restriction bypass: bots loop using message IDs sequentially
+        for msg_id in range(1, 100000):  # Scans last 1 Lakh potential files
+            try:
+                msg = await client.get_messages(int(chat_id), msg_id)
+                if not msg or msg.empty:
+                    continue
+                file = msg.document or msg.video or msg.audio
+                if file:
                     res = await save_file(file)
                     if res: count += 1
-                except Exception:
-                    continue
+            except Exception:
+                continue
+            # Chota delay to avoid flood wait error
+            if msg_id % 50 == 0:
+                await asyncio.sleep(1)
         await m.edit(f"✅ Indexing complete!\nTotal <b>{count}</b> files saved to your database.")
     except Exception as e:
         await m.edit(f"❌ Error while indexing: <code>{str(e)}</code>")
+        
