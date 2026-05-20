@@ -77,3 +77,9 @@ SHORTENER_API = environ.get('SHORTENER_API', "")
 SHORTENER_WEBSITE = environ.get('SHORTENER_WEBSITE', "")
 SPELL_CHECK_REPLY = environ.get('SPELL_CHECK_REPLY', "True") == "True"
 P_TTI_SHOW_OFF = environ.get('P_TTI_SHOW_OFF', "False") == "True"
+# --- CHANNELS & MEDIA CONFIGS FOR COMMANDS.PY ---
+CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '').split()]
+FILE_CHANNELS = [int(ch) for ch in environ.get('FILE_CHANNELS', '').split()]
+PICS = environ.get('PICS', 'https://graph.org/file/7eb62c64db3be373b9e4b.jpg').split()
+FILE_CHANNEL_SEND_MODE = environ.get('FILE_CHANNEL_SEND_MODE', '0')
+FILE_AUTO_DELETE_SECONDS = int(environ.get('FILE_AUTO_DELETE_SECONDS', '0'))
