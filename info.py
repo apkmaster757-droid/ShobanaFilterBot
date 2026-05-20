@@ -36,8 +36,8 @@ FORCE_SUB = environ.get('FORCE_SUB', 'Moviepornindia')
 SUPPORT_CHAT = "Moviepornindia"
 
 # 🖼️ Media & UI Settings
-START_IMG = environ.get('START_IMG', 'https://graph.org/file/7eb62c64db3be373b9e4b.jpg')
-PICS = environ.get('PICS', 'https://graph.org/file/7eb62c64db3be373b9e4b.jpg').split()
+START_IMG = environ.get('START_IMG', 'https://telegra.ph/file/8051a8302f7881023793e.jpg')
+PICS = environ.get('PICS', 'https://telegra.ph/file/8051a8302f7881023793e.jpg').split()
 
 # ⚙️ Custom Captions & Templates
 CUSTOM_FILE_CAPTION = environ.get('CUSTOM_FILE_CAPTION', "📁 <b>File Name:</b> {file_name}\n\n⚙️ <b>Size:</b> {file_size}\n\n🍿 <b>Join Here:</b> @Moviepornindia")
