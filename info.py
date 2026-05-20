@@ -66,3 +66,14 @@ DEFAULT_AUTH_CHANNELS = [int(ch) for ch in environ.get('DEFAULT_AUTH_CHANNELS', 
 # Missing IMDb & listing variables required by utils.py
 LONG_IMDB_DESCRIPTION = environ.get('LONG_IMDB_DESCRIPTION', "False") == "True"
 MAX_LIST_ELM = int(environ.get('MAX_LIST_ELM', 5))
+# --- FINAL FIX FOR MISSING VARIABLES ---
+LONG_IMDB_DESCRIPTION = environ.get('LONG_IMDB_DESCRIPTION', "False") == "True"
+MAX_LIST_ELM = int(environ.get('MAX_LIST_ELM', 5))
+CUSTOM_FILE_CAPTION = environ.get('CUSTOM_FILE_CAPTION', "")
+BATCH_FILE_CAPTION = environ.get('BATCH_FILE_CAPTION', "")
+IMDB_TEMPLATE = environ.get('IMDB_TEMPLATE', "")
+MDISK_API = environ.get('MDISK_API', "")
+SHORTENER_API = environ.get('SHORTENER_API', "")
+SHORTENER_WEBSITE = environ.get('SHORTENER_WEBSITE', "")
+SPELL_CHECK_REPLY = environ.get('SPELL_CHECK_REPLY', "True") == "True"
+P_TTI_SHOW_OFF = environ.get('P_TTI_SHOW_OFF', "False") == "True"
