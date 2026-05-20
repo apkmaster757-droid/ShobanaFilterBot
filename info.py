@@ -58,3 +58,8 @@ USE_CAPTION_FILTER = False # Strict clean files filter
 LOG_CHANNEL = int(environ.get('LOG_CHANNEL', ''))
 # Welcome settings for new users
 MELCOW_NEW_USERS = environ.get('MELCOW_NEW_USERS', "True") == "True"
+# Missing settings required by bot.py
+SESSION = environ.get('SESSION', 'Media_search')
+LOG_STR = environ.get('LOG_STR', '')
+KEEP_ALIVE_URL = environ.get('KEEP_ALIVE_URL', '')
+DEFAULT_AUTH_CHANNELS = [int(ch) for ch in environ.get('DEFAULT_AUTH_CHANNELS', '').split()]
