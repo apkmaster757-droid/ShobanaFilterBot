@@ -13,10 +13,19 @@ ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ
 AUTH_USERS = [int(user) if id_pattern.search(user) else user for user in environ.get('AUTH_USERS', '').split()]
 AUTH_GROUPS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('AUTH_GROUPS', '').split()]
 
-# 🗄️ Database Config
+# 🗄️ Database Config (All 5 Clusters Re-Added For ia_filterdb)
 DATABASE_URI = environ.get('DATABASE_URI', "")
 DATABASE_NAME = environ.get('DATABASE_NAME', "Cluster0")
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Telegram_files')
+
+DATABASE_URI2 = environ.get('DATABASE_URI2', "")
+DATABASE_NAME2 = environ.get('DATABASE_NAME2', "Cluster2")
+DATABASE_URI3 = environ.get('DATABASE_URI3', "")
+DATABASE_NAME3 = environ.get('DATABASE_NAME3', "Cluster3")
+DATABASE_URI4 = environ.get('DATABASE_URI4', "")
+DATABASE_NAME4 = environ.get('DATABASE_NAME4', "Cluster4")
+DATABASE_URI5 = environ.get('DATABASE_URI5', "")
+DATABASE_NAME5 = environ.get('DATABASE_NAME5', "Cluster5")
 
 # 📢 Links & Channel Promotion Settings
 BRANDING_LINK = "https://t.me/Moviepornindia"
